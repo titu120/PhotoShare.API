@@ -29,6 +29,7 @@ namespace PhotoShare.API.Migrations
                     table.PrimaryKey("PK_Users", x => x.Id);
                 });
 
+
             migrationBuilder.CreateTable(
                 name: "Follows",
                 columns: table => new
