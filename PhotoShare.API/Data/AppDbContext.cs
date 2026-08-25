@@ -21,10 +21,24 @@ namespace PhotoShare.API.Data
 
             // User → Post : One-to-Many relationship
             modelBuilder.Entity<Post>()
-                .HasOne(p => p.User)          // একটা Post এর একটাই User থাকে
-                .WithMany(u => u.Posts)        // একটা User এর অনেকগুলো Post থাকতে পারে
-                .HasForeignKey(p => p.UserId)  // Foreign Key হলো Post.UserId
-                .OnDelete(DeleteBehavior.Cascade); // User delete হলে তার সব Post ও delete হবে
+                .HasOne(p => p.User)
+                .WithMany(u => u.Posts)
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Follow → Follower (User) : কে follow করছে
+            modelBuilder.Entity<Follow>()
+                .HasOne(f => f.Follower)
+                .WithMany()
+                .HasForeignKey(f => f.FollowerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Follow → Following (User) : কাকে follow করা হচ্ছে
+            modelBuilder.Entity<Follow>()
+                .HasOne(f => f.Following)
+                .WithMany()
+                .HasForeignKey(f => f.FollowingId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }
