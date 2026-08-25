@@ -23,6 +23,7 @@ namespace PhotoShare.API.Migrations
                     ProfilePictureUrl = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
+
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Users", x => x.Id);
