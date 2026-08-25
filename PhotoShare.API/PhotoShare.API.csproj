@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <Folder Include="Controllers\" />
-    <Folder Include="Mdels\" />
     <Folder Include="DTOs\" />
     <Folder Include="Data\" />
   </ItemGroup>
