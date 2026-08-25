@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using PhotoShare.API.Data;
 
 namespace PhotoShare.API.Controllers
 {
@@ -6,5 +7,11 @@ namespace PhotoShare.API.Controllers
     [ApiController]
     public class UsersController : ControllerBase
     {
+        private readonly AppDbContext _context;
+
+        public UsersController(AppDbContext context)
+        {
+            _context = context;
+        }
     }
 }
