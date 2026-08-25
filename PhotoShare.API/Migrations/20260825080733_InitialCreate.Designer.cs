@@ -12,7 +12,7 @@ using PhotoShare.API.Data;
 namespace PhotoShare.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260825074546_InitialCreate")]
+    [Migration("20260825080733_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -171,7 +171,7 @@ namespace PhotoShare.API.Migrations
                     b.HasOne("PhotoShare.API.Models.User", "User")
                         .WithMany("Comments")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Post");
@@ -209,7 +209,7 @@ namespace PhotoShare.API.Migrations
                     b.HasOne("PhotoShare.API.Models.User", "User")
                         .WithMany("Likes")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Post");

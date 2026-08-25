@@ -26,14 +26,42 @@ namespace PhotoShare.API.Data
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Follow → Follower (User) : কে follow করছে
+            // Comment → Post : Cascade (Post delete হলে Comment delete হবে)
+            modelBuilder.Entity<Comment>()
+                .HasOne(c => c.Post)
+                .WithMany(p => p.Comments)
+                .HasForeignKey(c => c.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Comment → User : Restrict (multiple cascade path এড়াতে)
+            modelBuilder.Entity<Comment>()
+                .HasOne(c => c.User)
+                .WithMany(u => u.Comments)
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Like → Post : Cascade
+            modelBuilder.Entity<Like>()
+                .HasOne(l => l.Post)
+                .WithMany(p => p.Likes)
+                .HasForeignKey(l => l.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Like → User : Restrict
+            modelBuilder.Entity<Like>()
+                .HasOne(l => l.User)
+                .WithMany(u => u.Likes)
+                .HasForeignKey(l => l.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Follow → Follower (User)
             modelBuilder.Entity<Follow>()
                 .HasOne(f => f.Follower)
                 .WithMany()
                 .HasForeignKey(f => f.FollowerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Follow → Following (User) : কাকে follow করা হচ্ছে
+            // Follow → Following (User)
             modelBuilder.Entity<Follow>()
                 .HasOne(f => f.Following)
                 .WithMany()
