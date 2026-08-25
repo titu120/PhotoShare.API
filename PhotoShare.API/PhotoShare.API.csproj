@@ -11,4 +11,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+    <Folder Include="Mdels\" />
+    <Folder Include="DTOs\" />
+    <Folder Include="Data\" />
+  </ItemGroup>
+
 </Project>
