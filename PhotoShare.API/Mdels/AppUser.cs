@@ -10,6 +10,7 @@ namespace PhotoShare.API.Models
         // ব্যবহারকারীর নিজের সম্পর্কে ছোট বর্ণনা (optional, তাই ? দেওয়া)
         public string? Bio { get; set; }
 
+
         // Profile picture এর URL (optional)
         public string? ProfilePictureUrl { get; set; }
     }
