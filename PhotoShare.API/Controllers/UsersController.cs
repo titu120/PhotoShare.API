@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using PhotoShare.API.Data;
 using PhotoShare.API.Models;
 using System.Security.Claims;
@@ -14,7 +15,7 @@ namespace PhotoShare.API.Controllers
         // Database এর সাথে কথা বলার টুল
         private readonly AppDbContext _context;
 
-        // Identity দিয়ে User খোঁজা/ম্যানেজ করার টুল (এখন AppUser টাইপে)
+        // Identity দিয়ে User খোঁজা/ম্যানেজ করার টুল
         private readonly UserManager<AppUser> _userManager;
 
         // এই দুইটা টুল Controller কে সরবরাহ করা হচ্ছে (constructor)
@@ -29,14 +30,11 @@ namespace PhotoShare.API.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUserProfile(string id)
         {
-            // দেওয়া id দিয়ে database এ user খোঁজা হচ্ছে
             var user = await _userManager.FindByIdAsync(id);
 
-            // user না পাওয়া গেলে "404 Not Found" পাঠানো হচ্ছে
             if (user == null)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
-            // user পাওয়া গেলে তার তথ্য পাঠানো হচ্ছে (Password বাদে)
             return Ok(new
             {
                 user.Id,
@@ -48,29 +46,23 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: PUT api/Users/me
-        // কাজ: শুধু নিজের Bio/ProfilePicture আপডেট করা
-        // [Authorize] মানে: valid login token ছাড়া এটা ব্যবহার করা যাবে না
+        // কাজ: শুধু নিজের Bio/ProfilePicture আপডেট করা, [Authorize] দিয়ে সুরক্ষিত
         [Authorize]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequest request)
         {
-            // Login token থেকে "এখন কে logged-in আছে" তার ID বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // সেই ID দিয়ে user খোঁজা হচ্ছে
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
-            // নতুন data বসিয়ে দেওয়া হচ্ছে
             user.Bio = request.Bio;
             user.ProfilePictureUrl = request.ProfilePictureUrl;
 
-            // Database এ পরিবর্তন সংরক্ষণ করা হচ্ছে
             await _userManager.UpdateAsync(user);
 
-            // আপডেট হওয়া তথ্য ফেরত পাঠানো হচ্ছে
             return Ok(new
             {
                 user.Id,
@@ -79,9 +71,45 @@ namespace PhotoShare.API.Controllers
                 user.ProfilePictureUrl
             });
         }
+
+        // URL: GET api/Users/{id}/followers
+        // কাজ: এই user কে যারা যারা follow করছে, তাদের list দেখানো
+        [HttpGet("{id}/followers")]
+        public async Task<IActionResult> GetFollowers(string id)
+        {
+            var followers = await _context.Follows
+                .Where(f => f.FollowingId == id)
+                .Select(f => f.FollowerId)
+                .ToListAsync();
+
+            var followerUsers = await _context.Users
+                .Where(u => followers.Contains(u.Id))
+                .Select(u => new { u.Id, u.UserName, u.Email })
+                .ToListAsync();
+
+            return Ok(followerUsers);
+        }
+
+        // URL: GET api/Users/{id}/following
+        // কাজ: এই user কাকে কাকে follow করছে, তাদের list দেখানো
+        [HttpGet("{id}/following")]
+        public async Task<IActionResult> GetFollowing(string id)
+        {
+            var following = await _context.Follows
+                .Where(f => f.FollowerId == id)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            var followingUsers = await _context.Users
+                .Where(u => following.Contains(u.Id))
+                .Select(u => new { u.Id, u.UserName, u.Email })
+                .ToListAsync();
+
+            return Ok(followingUsers);
+        }
     }
 
-    // PUT request এ client যে data (Bio, ProfilePictureUrl) পাঠাবে তার shape/গঠন
+    // PUT request এ client যে data (Bio, ProfilePictureUrl) পাঠাবে তার shape
     public class UpdateProfileRequest
     {
         public string? Bio { get; set; }
