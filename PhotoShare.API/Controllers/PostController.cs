@@ -44,13 +44,15 @@ namespace PhotoShare.API.Controllers
             return Ok(new { post.Id, post.Caption, post.ImageUrl, post.UserId, post.CreatedAt });
         }
 
-        // URL: GET api/Posts
-        // কাজ: সব Post এর list দেখানো, সবচেয়ে নতুন Post সবার উপরে
+        // URL: GET api/Posts?page=1&pageSize=10
+        // কাজ: সব Post দেখানো, কিন্তু পাতায় পাতায় (Pagination সহ)
         [HttpGet]
-        public async Task<IActionResult> GetAllPosts()
+        public async Task<IActionResult> GetAllPosts(int page = 1, int pageSize = 10)
         {
             var posts = await _context.Posts
-                .OrderByDescending(p => p.CreatedAt)   // নতুন থেকে পুরাতন সাজানো
+                .OrderByDescending(p => p.CreatedAt)
+                .Skip((page - 1) * pageSize)   // আগের পাতাগুলোর Post বাদ দেওয়া হচ্ছে
+                .Take(pageSize)                 // এই পাতার জন্য নির্দিষ্ট সংখ্যক Post নেওয়া হচ্ছে
                 .Select(p => new { p.Id, p.Caption, p.ImageUrl, p.UserId, p.CreatedAt })
                 .ToListAsync();
 
