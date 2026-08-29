@@ -25,9 +25,16 @@ namespace PhotoShare.API.Controllers
         [HttpPost("{postId}")]
         public async Task<IActionResult> CreateComment(Guid postId, [FromBody] CreateCommentDto dto)
         {
+            // Validation: Comment খালি হতে পারবে না
+            if (string.IsNullOrWhiteSpace(dto.Content))
+                return BadRequest(new { message = "Comment খালি হতে পারবে না" });
+
+            // Validation: Comment ৫০০ character এর বেশি হতে পারবে না
+            if (dto.Content.Length > 500)
+                return BadRequest(new { message = "Comment ৫০০ character এর বেশি হতে পারবে না" });
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Post টা আছে কিনা check করা হচ্ছে
             var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
@@ -53,7 +60,6 @@ namespace PhotoShare.API.Controllers
                 comment.CreatedAt
             });
         }
-
 
         // URL: GET api/Comments/{postId}
         // কাজ: একটা Post এর সব Comment দেখানো, পুরাতন থেকে নতুন ক্রমে
