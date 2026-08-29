@@ -19,29 +19,32 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: POST api/Follow/{id}
-        // কাজ: একজন user কে Follow করা, নিজেকে নিজে Follow করা যাবে না
+        // কাজ: একজন user কে Follow করা, নিজেকে নিজে বা দুইবার Follow করা যাবে না
         [Authorize]
         [HttpPost("{id}")]
         public async Task<IActionResult> FollowUser(string id)
         {
-            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Validation: নিজেকে নিজে Follow করা যাবে না
             if (currentUserId == id)
                 return BadRequest(new { message = "নিজেকে নিজে Follow করা যাবে না" });
 
-            // যাকে Follow করতে চাওয়া হচ্ছে, সেই user সত্যিই আছে কিনা check করা হচ্ছে
             var targetUserExists = await _context.Users.AnyAsync(u => u.Id == id);
             if (!targetUserExists)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
-            // নতুন Follow তৈরি করা হচ্ছে
+            // Validation: আগে থেকেই Follow করা আছে কিনা check করা হচ্ছে
+            var alreadyFollowing = await _context.Follows
+                .AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+
+            if (alreadyFollowing)
+                return BadRequest(new { message = "আপনি ইতিমধ্যে এই user কে Follow করছেন" });
+
             var follow = new Follow
             {
                 Id = Guid.NewGuid(),
-                FollowerId = currentUserId,   // যে Follow করছে
-                FollowingId = id,              // যাকে Follow করা হচ্ছে
+                FollowerId = currentUserId,
+                FollowingId = id,
                 CreatedAt = DateTime.UtcNow
             };
 
