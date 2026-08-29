@@ -62,20 +62,25 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Comments/{postId}
-        // কাজ: একটা Post এর সব Comment দেখানো, পুরাতন থেকে নতুন ক্রমে
+        // কাজ: একটা Post এর সব Comment দেখানো, commenter এর username/profile picture সহ
         [HttpGet("{postId}")]
         public async Task<IActionResult> GetPostComments(Guid postId)
         {
             var comments = await _context.Comments
                 .Where(c => c.PostId == postId)
-                .OrderBy(c => c.CreatedAt)   // পুরাতন থেকে নতুন (OrderByDescending না, সাধারণ OrderBy)
-                .Select(c => new
-                {
-                    c.Id,
-                    c.Content,
-                    c.UserId,
-                    c.CreatedAt
-                })
+                .OrderBy(c => c.CreatedAt)
+                .Join(_context.Users,                          // Users টেবিলের সাথে জোড়া লাগানো
+                      comment => comment.UserId,                 // Comment এর UserId
+                      user => user.Id,                            // Users এর Id
+                      (comment, user) => new                      // দুটো মিলিয়ে নতুন shape বানানো
+                      {
+                          comment.Id,
+                          comment.Content,
+                          comment.CreatedAt,
+                          UserId = user.Id,
+                          Username = user.UserName,
+                          ProfilePictureUrl = user.ProfilePictureUrl
+                      })
                 .ToListAsync();
 
             return Ok(comments);
