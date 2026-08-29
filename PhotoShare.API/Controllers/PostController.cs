@@ -82,6 +82,20 @@ namespace PhotoShare.API.Controllers
             return Ok(posts);
         }
 
+        // URL: GET api/Posts/search?keyword=xyz
+        // কাজ: Caption এর মধ্যে keyword খুঁজে সেই সব Post বের করা
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchPosts(string keyword)
+        {
+            var posts = await _context.Posts
+                .Where(p => p.Caption.Contains(keyword))   // Caption এ keyword আছে কিনা চেক করা
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new { p.Id, p.Caption, p.ImageUrl, p.UserId, p.CreatedAt })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
         // URL: GET api/Posts/{id}
         // কাজ: একটা নির্দিষ্ট Post এর বিস্তারিত তথ্য দেখানো, Like/Comment সংখ্যা সহ
         [HttpGet("{id}")]
