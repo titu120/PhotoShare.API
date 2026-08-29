@@ -53,5 +53,32 @@ namespace PhotoShare.API.Controllers
                 comment.CreatedAt
             });
         }
+
+
+        // URL: GET api/Comments/{postId}
+        // কাজ: একটা Post এর সব Comment দেখানো, পুরাতন থেকে নতুন ক্রমে
+        [HttpGet("{postId}")]
+        public async Task<IActionResult> GetPostComments(Guid postId)
+        {
+            var comments = await _context.Comments
+                .Where(c => c.PostId == postId)
+                .OrderBy(c => c.CreatedAt)   // পুরাতন থেকে নতুন (OrderByDescending না, সাধারণ OrderBy)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Content,
+                    c.UserId,
+                    c.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(comments);
+        }
+
+
+
+
+
+
     }
 }
