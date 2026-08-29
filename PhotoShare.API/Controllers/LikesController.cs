@@ -89,5 +89,41 @@ namespace PhotoShare.API.Controllers
 
             return Ok(users);
         }
+
+        // URL: GET api/Likes/most-liked-user
+        // কাজ: বর্তমান logged-in user সবচেয়ে বেশি কার Post এ Like দিয়েছে তা বের করা
+        [Authorize]
+        [HttpGet("most-liked-user")]
+        public async Task<IActionResult> GetMostLikedUser()
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // আমার দেওয়া সব Like থেকে, প্রতিটা Post এর মালিক (owner UserId) বের করে,
+            // কাকে কতবার Like দিয়েছি তা গণনা করা হচ্ছে
+            var result = await _context.Likes
+                .Where(l => l.UserId == currentUserId)          // শুধু আমার দেওয়া Like
+                .Join(_context.Posts,                            // Post টেবিলের সাথে জোড়া লাগানো (Join)
+                      like => like.PostId,
+                      post => post.Id,
+                      (like, post) => post.UserId)                // শুধু Post এর মালিকের ID নেওয়া
+                .GroupBy(ownerId => ownerId)                      // মালিক অনুযায়ী দলে ভাগ করা
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    LikeCount = g.Count()                          // প্রতিটা দলে কতগুলো Like আছে গোনা
+                })
+                .OrderByDescending(x => x.LikeCount)               // সবচেয়ে বেশি সংখ্যক আগে
+                .FirstOrDefaultAsync();
+
+            if (result == null)
+                return Ok(new { message = "আপনি এখনো কাউকে Like দেননি" });
+
+            return Ok(result);
+        }
+
+
+
+
+
     }
 }
