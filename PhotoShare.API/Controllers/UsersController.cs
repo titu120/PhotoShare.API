@@ -28,25 +28,35 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Users/{id}
-        // কাজ: নির্দিষ্ট একজন ইউজারের পাবলিক প্রোফাইল দেখানো
+        // কাজ: user profile দেখানো, সাথে FollowersCount, FollowingCount, IsFollowedByCurrentUser
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUserProfile(string id)
         {
-            // UserManager দিয়ে ডাটাবেস থেকে ইউজারকে খোঁজা হচ্ছে
             var user = await _userManager.FindByIdAsync(id);
 
             if (user == null)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
-            // খেয়াল করুন: আমরা পুরো 'user' অবজেক্ট রিটার্ন করছি না। 
-            // কারণ পুরোটা দিলে PasswordHash-ও চলে যাবে! তাই বেছে বেছে শুধু দরকারি ডাটা পাঠানো হচ্ছে।
+            // বর্তমানে কেউ login করা থাকলে তার ID বের করা (না থাকলে null)
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
             return Ok(new
             {
                 user.Id,
                 user.UserName,
                 user.Email,
                 user.Bio,
-                user.ProfilePictureUrl
+                user.ProfilePictureUrl,
+
+                // এই user কে যতজন Follow করছে
+                FollowersCount = await _context.Follows.CountAsync(f => f.FollowingId == id),
+
+                // এই user কতজনকে Follow করছে
+                FollowingCount = await _context.Follows.CountAsync(f => f.FollowerId == id),
+
+                // বর্তমান logged-in user কি এই profile এর মালিককে Follow করছে
+                IsFollowedByCurrentUser = currentUserId != null &&
+                    await _context.Follows.AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == id)
             });
         }
 
