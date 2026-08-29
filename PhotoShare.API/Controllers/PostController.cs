@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using PhotoShare.API.Data;
 using PhotoShare.API.DTOs;
 using PhotoShare.API.Models;
@@ -20,22 +21,17 @@ namespace PhotoShare.API.Controllers
 
         // URL: POST api/Posts
         // কাজ: নতুন Post তৈরি করা, শুধু login করা user-ই পারবে
-        // Post টা automatic সেই user এর সাথে link হয়ে যাবে (কে বানালো, তার ID বসে যাবে)
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreatePost([FromBody] CreatePostDto dto)
         {
-            // Token থেকে বর্তমানে logged-in user এর ID বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // নতুন Post object বানানো হচ্ছে
             var post = Post.Create(dto.Caption, dto.ImageUrl, userId);
 
-            // Database এ যোগ করা হচ্ছে
             _context.Posts.Add(post);
             await _context.SaveChangesAsync();
 
-            // তৈরি হওয়া Post এর তথ্য ফেরত পাঠানো হচ্ছে
             return Ok(new
             {
                 post.Id,
@@ -44,6 +40,26 @@ namespace PhotoShare.API.Controllers
                 post.UserId,
                 post.CreatedAt
             });
+        }
+
+        // URL: GET api/Posts
+        // কাজ: সব Post এর list দেখানো, সবচেয়ে নতুন Post সবার উপরে (OrderByDescending)
+        [HttpGet]
+        public async Task<IActionResult> GetAllPosts()
+        {
+            var posts = await _context.Posts
+                .OrderByDescending(p => p.CreatedAt)   // নতুন থেকে পুরাতন সাজানো হচ্ছে
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Caption,
+                    p.ImageUrl,
+                    p.UserId,
+                    p.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(posts);
         }
     }
 }
