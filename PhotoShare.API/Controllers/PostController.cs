@@ -37,7 +37,7 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Posts?page=1&pageSize=10
-        // কাজ: সব Post দেখানো, Pagination, TimeAgo, LikeCount, IsLikedByCurrentUser সহ
+        // কাজ: সব Post দেখানো, Pagination, TimeAgo, LikeCount, CommentCount, IsLikedByCurrentUser সহ
         [HttpGet]
         public async Task<IActionResult> GetAllPosts(int page = 1, int pageSize = 10)
         {
@@ -58,7 +58,7 @@ namespace PhotoShare.API.Controllers
                 p.CreatedAt,
                 TimeAgo = TimeAgoHelper.GetTimeAgo(p.CreatedAt),
                 LikeCount = p.Likes.Count,
-                CommentCount = p.Comments.Count,   // ← নতুন যোগ হলো
+                CommentCount = p.Comments.Count,
                 IsLikedByCurrentUser = currentUserId != null && p.Likes.Any(l => l.UserId == currentUserId)
             });
 
@@ -100,6 +100,79 @@ namespace PhotoShare.API.Controllers
                 .ToListAsync();
 
             return Ok(posts);
+        }
+
+        // URL: GET api/Posts/feed?page=1&pageSize=10
+        // কাজ: logged-in user যাদের Follow করে, শুধু তাদের Post দেখানো (Newest-first, Pagination সহ)
+        // Author info, Like/Comment count সহ, PostFeedDto দিয়ে shape করা
+        // ⚠️ এটাও GetPostById({id}) এর আগে থাকতে হবে
+        [Authorize]
+        [HttpGet("feed")]
+        public async Task<IActionResult> GetFeed(int page = 1, int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // আমি যাদের Follow করি, তাদের ID list
+            var followingIds = await _context.Follows
+                .Where(f => f.FollowerId == currentUserId)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            var posts = await _context.Posts
+                .Where(p => followingIds.Contains(p.UserId))   // শুধু follow করা মানুষদের Post
+                .OrderByDescending(p => p.CreatedAt)             // newest-first
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Join(_context.Users,
+                      post => post.UserId,
+                      user => user.Id,
+                      (post, user) => new PostFeedDto
+                      {
+                          Id = post.Id,
+                          Caption = post.Caption,
+                          ImageUrl = post.ImageUrl,
+                          CreatedAt = post.CreatedAt,
+                          AuthorId = user.Id,
+                          AuthorUsername = user.UserName,
+                          AuthorProfilePictureUrl = user.ProfilePictureUrl,
+                          LikeCount = post.Likes.Count,
+                          CommentCount = post.Comments.Count,
+                          IsLikedByCurrentUser = post.Likes.Any(l => l.UserId == currentUserId)
+                      })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
+        // URL: GET api/Posts/explore
+        // কাজ: যাদের Follow করা হয়নি, তাদের জনপ্রিয় Post দেখানো (Like সংখ্যা অনুযায়ী)
+        // ⚠️ এটাও GetPostById({id}) এর আগে থাকতে হবে
+        [Authorize]
+        [HttpGet("explore")]
+        public async Task<IActionResult> GetExploreFeed()
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var followingIds = await _context.Follows
+                .Where(f => f.FollowerId == currentUserId)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            var explorePosts = await _context.Posts
+                .Where(p => !followingIds.Contains(p.UserId) && p.UserId != currentUserId)
+                .OrderByDescending(p => p.Likes.Count)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Caption,
+                    p.ImageUrl,
+                    p.UserId,
+                    p.CreatedAt,
+                    LikeCount = p.Likes.Count
+                })
+                .ToListAsync();
+
+            return Ok(explorePosts);
         }
 
         // URL: GET api/Posts/{id}
@@ -169,74 +242,5 @@ namespace PhotoShare.API.Controllers
 
             return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
         }
-
-        // URL: GET api/Posts/feed?page=1&pageSize=10
-        // কাজ: logged-in user যাদের Follow করে, শুধু তাদের Post দেখানো, Pagination সহ
-        [Authorize]
-        [HttpGet("feed")]
-        public async Task<IActionResult> GetFeed(int page = 1, int pageSize = 10)
-        {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            var followingIds = await _context.Follows
-                .Where(f => f.FollowerId == currentUserId)
-                .Select(f => f.FollowingId)
-                .ToListAsync();
-
-            var posts = await _context.Posts
-                .Where(p => followingIds.Contains(p.UserId))
-                .OrderByDescending(p => p.CreatedAt)   // newest-first
-                .Skip((page - 1) * pageSize)            // Pagination (Step 71)
-                .Take(pageSize)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Caption,
-                    p.ImageUrl,
-                    p.UserId,
-                    p.CreatedAt
-                })
-                .ToListAsync();
-
-            return Ok(posts);
-        }
-
-        // URL: GET api/Posts/explore
-        // কাজ: যাদের Follow করা হয়নি, তাদের জনপ্রিয় Post দেখানো (Like সংখ্যা অনুযায়ী)
-        [Authorize]
-        [HttpGet("explore")]
-        public async Task<IActionResult> GetExploreFeed()
-        {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            // আমি যাদের Follow করি, তাদের ID list
-            var followingIds = await _context.Follows
-                .Where(f => f.FollowerId == currentUserId)
-                .Select(f => f.FollowingId)
-                .ToListAsync();
-
-            // যাদের Follow করি না (নিজেকেও বাদ), তাদের Post — Like সংখ্যা অনুযায়ী সাজানো
-            var explorePosts = await _context.Posts
-                .Where(p => !followingIds.Contains(p.UserId) && p.UserId != currentUserId)
-                .OrderByDescending(p => p.Likes.Count)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Caption,
-                    p.ImageUrl,
-                    p.UserId,
-                    p.CreatedAt,
-                    LikeCount = p.Likes.Count
-                })
-                .ToListAsync();
-
-            return Ok(explorePosts);
-        }
-
-
-
-
-
-
     }
 }
