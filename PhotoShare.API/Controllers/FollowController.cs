@@ -75,6 +75,19 @@ namespace PhotoShare.API.Controllers
             return Ok(new { message = "Unfollow করা হয়েছে" });
         }
 
+        // URL: GET api/Follow/{id}/is-following/{targetId}
+        // কাজ: {id} user টা {targetId} user কে Follow করে কিনা চেক করা
+        [HttpGet("{id}/is-following/{targetId}")]
+        public async Task<IActionResult> IsFollowing(string id, string targetId)
+        {
+            var isFollowing = await _context.Follows
+                .AnyAsync(f => f.FollowerId == id && f.FollowingId == targetId);
+
+            return Ok(new { isFollowing });
+        }
+
+
+
 
 
     }
