@@ -129,6 +129,32 @@ namespace PhotoShare.API.Controllers
             });
         }
 
+        // URL: DELETE api/Posts/{id}
+        // কাজ: Post মুছে ফেলা, শুধু যে বানিয়েছে সে-ই পারবে
+        [Authorize]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeletePost(Guid id)
+        {
+            // যে Post টা মুছতে চাওয়া হচ্ছে, সেটা খোঁজা হচ্ছে
+            var post = await _context.Posts.FindAsync(id);
+
+            if (post == null)
+                return NotFound(new { message = "Post পাওয়া যায়নি" });
+
+            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Validation: শুধু নিজের Post-ই delete করা যাবে
+            if (post.UserId != currentUserId)
+                return Forbid();
+
+            // Post মুছে ফেলা হচ্ছে
+            _context.Posts.Remove(post);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
+        }
+
 
 
     }
