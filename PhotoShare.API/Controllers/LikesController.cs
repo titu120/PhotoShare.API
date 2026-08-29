@@ -31,7 +31,6 @@ namespace PhotoShare.API.Controllers
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Validation: আগে থেকেই Like দেওয়া আছে কিনা
             var alreadyLiked = await _context.Likes
                 .AnyAsync(l => l.PostId == postId && l.UserId == userId);
 
@@ -98,21 +97,19 @@ namespace PhotoShare.API.Controllers
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // আমার দেওয়া সব Like থেকে, প্রতিটা Post এর মালিক (owner UserId) বের করে,
-            // কাকে কতবার Like দিয়েছি তা গণনা করা হচ্ছে
             var result = await _context.Likes
-                .Where(l => l.UserId == currentUserId)          // শুধু আমার দেওয়া Like
-                .Join(_context.Posts,                            // Post টেবিলের সাথে জোড়া লাগানো (Join)
+                .Where(l => l.UserId == currentUserId)
+                .Join(_context.Posts,
                       like => like.PostId,
                       post => post.Id,
-                      (like, post) => post.UserId)                // শুধু Post এর মালিকের ID নেওয়া
-                .GroupBy(ownerId => ownerId)                      // মালিক অনুযায়ী দলে ভাগ করা
+                      (like, post) => post.UserId)
+                .GroupBy(ownerId => ownerId)
                 .Select(g => new
                 {
                     UserId = g.Key,
-                    LikeCount = g.Count()                          // প্রতিটা দলে কতগুলো Like আছে গোনা
+                    LikeCount = g.Count()
                 })
-                .OrderByDescending(x => x.LikeCount)               // সবচেয়ে বেশি সংখ্যক আগে
+                .OrderByDescending(x => x.LikeCount)
                 .FirstOrDefaultAsync();
 
             if (result == null)
@@ -121,9 +118,42 @@ namespace PhotoShare.API.Controllers
             return Ok(result);
         }
 
+        // URL: POST api/Likes/{postId}/toggle
+        // কাজ: Like থাকলে Unlike করা, না থাকলে Like করা — একই endpoint দুটোই করে
+        [Authorize]
+        [HttpPost("{postId}/toggle")]
+        public async Task<IActionResult> ToggleLike(Guid postId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
+            if (!postExists)
+                return NotFound(new { message = "Post পাওয়া যায়নি" });
 
+            var existingLike = await _context.Likes
+                .FirstOrDefaultAsync(l => l.PostId == postId && l.UserId == userId);
 
-
+            if (existingLike != null)
+            {
+                // আগে থেকে Like ছিল → এখন Unlike করা হচ্ছে
+                _context.Likes.Remove(existingLike);
+                await _context.SaveChangesAsync();
+                return Ok(new { liked = false, message = "Unlike করা হয়েছে" });
+            }
+            else
+            {
+                // আগে Like ছিল না → এখন নতুন Like দেওয়া হচ্ছে
+                var like = new Like
+                {
+                    Id = Guid.NewGuid(),
+                    PostId = postId,
+                    UserId = userId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Likes.Add(like);
+                await _context.SaveChangesAsync();
+                return Ok(new { liked = true, message = "Like দেওয়া হয়েছে" });
+            }
+        }
     }
 }

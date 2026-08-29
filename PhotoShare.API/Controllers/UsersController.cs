@@ -8,34 +8,38 @@ using System.Security.Claims;
 
 namespace PhotoShare.API.Controllers
 {
+    // [Route] নির্দেশ করে এই Controller এর লিংক কেমন হবে। 
+    // "api/[controller]" মানে হলো লিংকটি হবে: api/Users
     [Route("api/[controller]")]
-    [ApiController]
+    [ApiController] // এটি বোঝায় যে এটি একটি API Controller, যা অটোমেটিক কিছু সুবিধা দেয় (যেমন- Model State Validation)
     public class UsersController : ControllerBase
     {
-        // Database এর সাথে কথা বলার টুল
+        // ডাটাবেসের সাথে সরাসরি কথা বলার জন্য EF Core এর টুল
         private readonly AppDbContext _context;
 
-        // Identity দিয়ে User খোঁজা/ম্যানেজ করার টুল
+        // ASP.NET Identity এর একটি স্পেশাল টুল, যা ইউজার খোঁজা বা আপডেট করার কাজকে সহজ করে দেয়
         private readonly UserManager<AppUser> _userManager;
 
-        // এই দুইটা টুল Controller কে সরবরাহ করা হচ্ছে (constructor)
+        // Dependency Injection (DI) এর মাধ্যমে এই টুলগুলো Controller এ আনা হচ্ছে
         public UsersController(AppDbContext context, UserManager<AppUser> userManager)
         {
             _context = context;
             _userManager = userManager;
         }
 
-
         // URL: GET api/Users/{id}
-        // কাজ: নির্দিষ্ট একজন user এর profile দেখানো (password ছাড়া)
+        // কাজ: নির্দিষ্ট একজন ইউজারের পাবলিক প্রোফাইল দেখানো
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUserProfile(string id)
         {
+            // UserManager দিয়ে ডাটাবেস থেকে ইউজারকে খোঁজা হচ্ছে
             var user = await _userManager.FindByIdAsync(id);
 
             if (user == null)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
+            // খেয়াল করুন: আমরা পুরো 'user' অবজেক্ট রিটার্ন করছি না। 
+            // কারণ পুরোটা দিলে PasswordHash-ও চলে যাবে! তাই বেছে বেছে শুধু দরকারি ডাটা পাঠানো হচ্ছে।
             return Ok(new
             {
                 user.Id,
@@ -47,11 +51,12 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: PUT api/Users/me
-        // কাজ: শুধু নিজের Bio/ProfilePicture আপডেট করা, [Authorize] দিয়ে সুরক্ষিত
-        [Authorize]
+        // কাজ: শুধু নিজের Bio/ProfilePicture আপডেট করা
+        [Authorize] // [Authorize] মানে হলো টোকেন ছাড়া (লগইন ছাড়া) কেউ এই লিংকে ঢুকতে পারবে না।
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequest request)
         {
+            // ম্যাজিক লাইন! যে ইউজার লগইন করে রিকোয়েস্ট পাঠিয়েছে, তার টোকেন থেকে তার ID টা নিরাপদে বের করে আনা হচ্ছে।
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             var user = await _userManager.FindByIdAsync(userId);
@@ -59,9 +64,11 @@ namespace PhotoShare.API.Controllers
             if (user == null)
                 return NotFound(new { message = "User পাওয়া যায়নি" });
 
+            // ক্লায়েন্টের পাঠানো নতুন ডাটাগুলো সেট করা হচ্ছে
             user.Bio = request.Bio;
             user.ProfilePictureUrl = request.ProfilePictureUrl;
 
+            // ডাটাবেসে সেভ করা হচ্ছে
             await _userManager.UpdateAsync(user);
 
             return Ok(new
@@ -74,15 +81,17 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Users/{id}/followers
-        // কাজ: এই user কে যারা যারা follow করছে, তাদের list দেখানো
+        // কাজ: এই ইউজারকে যারা যারা ফলো করছে (ফলোয়ার), তাদের লিস্ট দেখানো
         [HttpGet("{id}/followers")]
         public async Task<IActionResult> GetFollowers(string id)
         {
+            // ধাপ ১: Follow টেবিল থেকে বের করা হলো কে কে এই 'id' কে ফলো করছে (শুধু তাদের আইডিগুলো নেওয়া হলো)
             var followers = await _context.Follows
                 .Where(f => f.FollowingId == id)
                 .Select(f => f.FollowerId)
                 .ToListAsync();
 
+            // ধাপ ২: যাদের আইডি পাওয়া গেলো, Users টেবিল থেকে তাদের নাম ও ইমেইল বের করে আনা হলো
             var followerUsers = await _context.Users
                 .Where(u => followers.Contains(u.Id))
                 .Select(u => new { u.Id, u.UserName, u.Email })
@@ -92,10 +101,11 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Users/{id}/following
-        // কাজ: এই user কাকে কাকে follow করছে, তাদের list দেখানো
+        // কাজ: এই ইউজার নিজে কাকে কাকে ফলো করছে (ফলোয়িং), তাদের লিস্ট দেখানো
         [HttpGet("{id}/following")]
         public async Task<IActionResult> GetFollowing(string id)
         {
+            // লজিকটা ফলোয়ারের মতোই, শুধু Where কন্ডিশনটা উল্টে গেছে (FollowerId == id)
             var following = await _context.Follows
                 .Where(f => f.FollowerId == id)
                 .Select(f => f.FollowingId)
@@ -110,11 +120,12 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: GET api/Users/{id}/posts
-        // কাজ: একজন নির্দিষ্ট user এর সব Post দেখানো
+        // কাজ: একজন নির্দিষ্ট ইউজারের সব Post দেখানো
         [HttpGet("{id}/posts")]
         public async Task<IActionResult> GetUserPosts(string id)
         {
-            // LINQ Where দিয়ে filter করা হচ্ছে — শুধু এই UserId এর Post গুলো
+            // LINQ Where দিয়ে ফিল্টার করা হচ্ছে — শুধু এই UserId এর Post গুলো আসবে।
+            // OrderByDescending দিয়ে নতুন পোস্টগুলো আগে (উপরে) দেখানো হচ্ছে।
             var posts = await _context.Posts
                 .Where(p => p.UserId == id)
                 .OrderByDescending(p => p.CreatedAt)
@@ -129,14 +140,11 @@ namespace PhotoShare.API.Controllers
 
             return Ok(posts);
         }
-
-
-
-
-
     }
 
-    // PUT request এ client যে data (Bio, ProfilePictureUrl) পাঠাবে তার shape
+    // এটাকে বলা হয় DTO (Data Transfer Object)। 
+    // ইউজার প্রোফাইল আপডেটের সময় ক্লায়েন্ট (যেমন React বা Android অ্যাপ) ঠিক কী কী ডাটা পাঠাবে, 
+    // তার একটা নির্দিষ্ট ছাঁচ বা কাঠামো হলো এই ক্লাসটি।
     public class UpdateProfileRequest
     {
         public string? Bio { get; set; }
