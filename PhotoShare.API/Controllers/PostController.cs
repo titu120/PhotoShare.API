@@ -201,6 +201,38 @@ namespace PhotoShare.API.Controllers
             return Ok(posts);
         }
 
+        // URL: GET api/Posts/explore
+        // কাজ: যাদের Follow করা হয়নি, তাদের জনপ্রিয় Post দেখানো (Like সংখ্যা অনুযায়ী)
+        [Authorize]
+        [HttpGet("explore")]
+        public async Task<IActionResult> GetExploreFeed()
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // আমি যাদের Follow করি, তাদের ID list
+            var followingIds = await _context.Follows
+                .Where(f => f.FollowerId == currentUserId)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // যাদের Follow করি না (নিজেকেও বাদ), তাদের Post — Like সংখ্যা অনুযায়ী সাজানো
+            var explorePosts = await _context.Posts
+                .Where(p => !followingIds.Contains(p.UserId) && p.UserId != currentUserId)
+                .OrderByDescending(p => p.Likes.Count)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Caption,
+                    p.ImageUrl,
+                    p.UserId,
+                    p.CreatedAt,
+                    LikeCount = p.Likes.Count
+                })
+                .ToListAsync();
+
+            return Ok(explorePosts);
+        }
+
 
 
 
