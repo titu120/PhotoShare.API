@@ -198,6 +198,7 @@ namespace PhotoShare.API.Controllers
                 })
                 .ToListAsync();
 
+
             return Ok(posts);
         }
 
