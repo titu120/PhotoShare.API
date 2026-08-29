@@ -94,5 +94,42 @@ namespace PhotoShare.API.Controllers
 
             return Ok(post);
         }
+
+        // URL: PUT api/Posts/{id}
+        // কাজ: Post এর Caption পরিবর্তন করা, শুধু যে বানিয়েছে সে-ই পারবে
+        [Authorize]
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdatePost(Guid id, [FromBody] UpdatePostDto dto)
+        {
+            // যে Post টা বদলাতে চাওয়া হচ্ছে, সেটা খোঁজা হচ্ছে
+            var post = await _context.Posts.FindAsync(id);
+
+            if (post == null)
+                return NotFound(new { message = "Post পাওয়া যায়নি" });
+
+            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Validation: শুধু নিজের Post-ই edit করা যাবে
+            if (post.UserId != currentUserId)
+                return Forbid();
+
+            // Caption পরিবর্তন করা হচ্ছে
+            post.UpdateCaption(dto.Caption);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                post.Id,
+                post.Caption,
+                post.ImageUrl,
+                post.UserId,
+                post.CreatedAt
+            });
+        }
+
+
+
     }
 }
