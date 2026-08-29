@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoShare.API.Data;
 using PhotoShare.API.DTOs;
+using PhotoShare.API.Helpers;
 using PhotoShare.API.Models;
 using System.Security.Claims;
 
@@ -28,46 +29,55 @@ namespace PhotoShare.API.Controllers
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreatePost([FromBody] CreatePostDto dto)
-
         {
             // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // নতুন Post object বানানো হচ্ছে (Caption, ImageUrl, UserId দিয়ে)
+            // নতুন Post object বানানো হচ্ছে
             var post = Post.Create(dto.Caption, dto.ImageUrl, userId);
 
             // Database এ যোগ করা হচ্ছে
             _context.Posts.Add(post);
             await _context.SaveChangesAsync();
 
-            // তৈরি হওয়া Post এর তথ্য ফেরত পাঠানো হচ্ছে
             return Ok(new { post.Id, post.Caption, post.ImageUrl, post.UserId, post.CreatedAt });
         }
 
         // URL: GET api/Posts?page=1&pageSize=10
-        // কাজ: সব Post দেখানো, কিন্তু পাতায় পাতায় (Pagination সহ)
+        // কাজ: সব Post দেখানো, নতুন থেকে পুরাতন, পাতায় পাতায় (Pagination), সাথে "কত আগে" লেখা
         [HttpGet]
         public async Task<IActionResult> GetAllPosts(int page = 1, int pageSize = 10)
         {
+            // Database থেকে এই পাতার জন্য দরকারি Post গুলো আনা হচ্ছে
             var posts = await _context.Posts
-                .OrderByDescending(p => p.CreatedAt)
-                .Skip((page - 1) * pageSize)   // আগের পাতাগুলোর Post বাদ দেওয়া হচ্ছে
-                .Take(pageSize)                 // এই পাতার জন্য নির্দিষ্ট সংখ্যক Post নেওয়া হচ্ছে
-                .Select(p => new { p.Id, p.Caption, p.ImageUrl, p.UserId, p.CreatedAt })
+                .OrderByDescending(p => p.CreatedAt)   // নতুন থেকে পুরাতন সাজানো
+                .Skip((page - 1) * pageSize)           // আগের পাতাগুলোর Post বাদ
+                .Take(pageSize)                         // এই পাতার জন্য নির্দিষ্ট সংখ্যক Post
                 .ToListAsync();
 
-            return Ok(posts);
+            // প্রতিটা Post এর সাথে "TimeAgo" (কত আগে) যোগ করে নতুন shape এ পাঠানো হচ্ছে
+            var result = posts.Select(p => new
+            {
+                p.Id,
+                p.Caption,
+                p.ImageUrl,
+                p.UserId,
+                p.CreatedAt,
+                TimeAgo = TimeAgoHelper.GetTimeAgo(p.CreatedAt)
+            });
+
+            return Ok(result);
         }
 
         // URL: GET api/Posts/most-liked
         // কাজ: সবচেয়ে বেশি Like পাওয়া Post গুলো দেখানো (Top 10)
-        // ⚠️ এটা অবশ্যই GetPostById({id}) এর আগে থাকতে হবে, নাহলে রুট ভুলভাবে ম্যাচ হতে পারে
+        // ⚠️ এটা অবশ্যই GetPostById({id}) এর আগে থাকতে হবে
         [HttpGet("most-liked")]
         public async Task<IActionResult> GetMostLikedPosts()
         {
             var posts = await _context.Posts
-                .OrderByDescending(p => p.Likes.Count)   // Like সংখ্যা অনুযায়ী বেশি থেকে কম সাজানো
-                .Take(10)                                 // শুধু প্রথম ১০টা নেওয়া
+                .OrderByDescending(p => p.Likes.Count)   // Like সংখ্যা অনুযায়ী বেশি থেকে কম
+                .Take(10)                                 // শুধু প্রথম ১০টা
                 .Select(p => new
                 {
                     p.Id,
@@ -84,11 +94,12 @@ namespace PhotoShare.API.Controllers
 
         // URL: GET api/Posts/search?keyword=xyz
         // কাজ: Caption এর মধ্যে keyword খুঁজে সেই সব Post বের করা
+        // ⚠️ এটাও GetPostById({id}) এর আগে থাকতে হবে
         [HttpGet("search")]
         public async Task<IActionResult> SearchPosts(string keyword)
         {
             var posts = await _context.Posts
-                .Where(p => p.Caption.Contains(keyword))   // Caption এ keyword আছে কিনা চেক করা
+                .Where(p => p.Caption.Contains(keyword))   // Caption এ keyword আছে কিনা
                 .OrderByDescending(p => p.CreatedAt)
                 .Select(p => new { p.Id, p.Caption, p.ImageUrl, p.UserId, p.CreatedAt })
                 .ToListAsync();
@@ -110,12 +121,11 @@ namespace PhotoShare.API.Controllers
                     p.ImageUrl,
                     p.UserId,
                     p.CreatedAt,
-                    LikeCount = p.Likes.Count,       // এই Post এর মোট Like সংখ্যা
-                    CommentCount = p.Comments.Count  // এই Post এর মোট Comment সংখ্যা
+                    LikeCount = p.Likes.Count,
+                    CommentCount = p.Comments.Count
                 })
                 .FirstOrDefaultAsync();
 
-            // Post না পাওয়া গেলে error
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
@@ -128,19 +138,16 @@ namespace PhotoShare.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePost(Guid id, [FromBody] UpdatePostDto dto)
         {
-            // যে Post টা বদলাতে চাওয়া হচ্ছে সেটা খোঁজা
             var post = await _context.Posts.FindAsync(id);
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Token থেকে বর্তমান user এর ID বের করা
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             // Validation: শুধু নিজের Post-ই edit করা যাবে
             if (post.UserId != currentUserId)
                 return Forbid();
 
-            // Caption পরিবর্তন করা
             post.UpdateCaption(dto.Caption);
             await _context.SaveChangesAsync();
 
@@ -153,19 +160,16 @@ namespace PhotoShare.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(Guid id)
         {
-            // যে Post টা মুছতে চাওয়া হচ্ছে সেটা খোঁজা
             var post = await _context.Posts.FindAsync(id);
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Token থেকে বর্তমান user এর ID বের করা
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             // Validation: শুধু নিজের Post-ই delete করা যাবে
             if (post.UserId != currentUserId)
                 return Forbid();
 
-            // Post মুছে ফেলা
             _context.Posts.Remove(post);
             await _context.SaveChangesAsync();
 
