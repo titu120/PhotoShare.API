@@ -86,6 +86,35 @@ namespace PhotoShare.API.Controllers
             return Ok(new { isFollowing });
         }
 
+        // URL: GET api/Follow/{id}/mutual
+        // কাজ: এই user এর সাথে যাদের Mutual Follow আছে (একে অপরকে Follow করছে) তাদের list বের করা
+        [HttpGet("{id}/mutual")]
+        public async Task<IActionResult> GetMutualFollows(string id)
+        {
+            // এই user যাদের Follow করছে, তাদের ID list
+            var following = await _context.Follows
+                .Where(f => f.FollowerId == id)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // এই user কে যারা Follow করছে, তাদের ID list
+            var followers = await _context.Follows
+                .Where(f => f.FollowingId == id)
+                .Select(f => f.FollowerId)
+                .ToListAsync();
+
+            // দুই list এর মধ্যে যেগুলো "কমন" (উভয় জায়গায় আছে) সেগুলোই Mutual
+            var mutualIds = following.Intersect(followers).ToList();
+
+            // সেই ID গুলো দিয়ে আসল User তথ্য বের করা হচ্ছে
+            var mutualUsers = await _context.Users
+                .Where(u => mutualIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.UserName })
+                .ToListAsync();
+
+            return Ok(mutualUsers);
+        }
+
 
 
 
