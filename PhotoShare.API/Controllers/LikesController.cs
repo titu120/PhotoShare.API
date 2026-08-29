@@ -12,7 +12,6 @@ namespace PhotoShare.API.Controllers
     [ApiController]
     public class LikesController : ControllerBase
     {
-        // Database এর সাথে কথা বলার টুল
         private readonly AppDbContext _context;
 
         public LikesController(AppDbContext context)
@@ -21,8 +20,7 @@ namespace PhotoShare.API.Controllers
         }
 
         // URL: POST api/Likes/{postId}
-        // কাজ: একটা Post এ Like দেওয়া, শুধু login করা user-ই পারবে
-        // একই user একই Post দুইবার Like দিতে পারবে না
+        // কাজ: একটা Post এ Like দেওয়া, একই user দুইবার Like দিতে পারবে না
         [Authorize]
         [HttpPost("{postId}")]
         public async Task<IActionResult> LikePost(Guid postId)
@@ -33,7 +31,7 @@ namespace PhotoShare.API.Controllers
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Validation: এই user আগে থেকেই এই Post এ Like দিয়েছে কিনা check করা হচ্ছে
+            // Validation: আগে থেকেই Like দেওয়া আছে কিনা
             var alreadyLiked = await _context.Likes
                 .AnyAsync(l => l.PostId == postId && l.UserId == userId);
 
@@ -62,33 +60,28 @@ namespace PhotoShare.API.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // এই user এর এই Post এ দেওয়া Like টা খোঁজা হচ্ছে
             var like = await _context.Likes
                 .FirstOrDefaultAsync(l => l.PostId == postId && l.UserId == userId);
 
             if (like == null)
                 return NotFound(new { message = "আপনি এই Post এ Like দেননি" });
 
-            // Like মুছে ফেলা হচ্ছে
             _context.Likes.Remove(like);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Unlike করা হয়েছে" });
         }
 
-
         // URL: GET api/Likes/{postId}
         // কাজ: একটা Post এ কারা কারা Like দিয়েছে তাদের list দেখানো
         [HttpGet("{postId}")]
         public async Task<IActionResult> GetPostLikes(Guid postId)
         {
-            // এই Post এর সব Like থেকে UserId গুলো বের করা হচ্ছে
             var userIds = await _context.Likes
                 .Where(l => l.PostId == postId)
                 .Select(l => l.UserId)
                 .ToListAsync();
 
-            // সেই UserId গুলো দিয়ে আসল User এর তথ্য (নাম) বের করা হচ্ছে
             var users = await _context.Users
                 .Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.UserName })
@@ -96,11 +89,5 @@ namespace PhotoShare.API.Controllers
 
             return Ok(users);
         }
-
-
-
-
-
-
     }
 }
