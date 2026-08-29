@@ -41,7 +41,6 @@ namespace PhotoShare.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllPosts(int page = 1, int pageSize = 10)
         {
-            // বর্তমানে কেউ login করা থাকলে তার ID বের করা (login না থাকলে null হবে)
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             var posts = await _context.Posts
@@ -59,7 +58,7 @@ namespace PhotoShare.API.Controllers
                 p.CreatedAt,
                 TimeAgo = TimeAgoHelper.GetTimeAgo(p.CreatedAt),
                 LikeCount = p.Likes.Count,
-                // এই user login করা থাকলে এবং এই Post এ Like দিয়ে থাকলে true হবে
+                CommentCount = p.Comments.Count,   // ← নতুন যোগ হলো
                 IsLikedByCurrentUser = currentUserId != null && p.Likes.Any(l => l.UserId == currentUserId)
             });
 
