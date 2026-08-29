@@ -242,5 +242,50 @@ namespace PhotoShare.API.Controllers
 
             return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
         }
+
+        // URL: GET api/Posts/combined-feed?page=1&pageSize=10
+        // কাজ: নিজের Post + Follow করা সবার Post একসাথে দেখানো
+        // ⚠️ এটাও GetPostById({id}) এর আগে থাকতে হবে
+        [Authorize]
+        [HttpGet("combined-feed")]
+        public async Task<IActionResult> GetCombinedFeed(int page = 1, int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var followingIds = await _context.Follows
+                .Where(f => f.FollowerId == currentUserId)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // নিজের ID টাও এই list এ যোগ করে দেওয়া হচ্ছে
+            followingIds.Add(currentUserId);
+
+            var posts = await _context.Posts
+                .Where(p => followingIds.Contains(p.UserId))   // এখন নিজের + follow করা সবার Post আসবে
+                .OrderByDescending(p => p.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Join(_context.Users,
+                      post => post.UserId,
+                      user => user.Id,
+                      (post, user) => new PostFeedDto
+                      {
+                          Id = post.Id,
+                          Caption = post.Caption,
+                          ImageUrl = post.ImageUrl,
+                          CreatedAt = post.CreatedAt,
+                          AuthorId = user.Id,
+                          AuthorUsername = user.UserName,
+                          AuthorProfilePictureUrl = user.ProfilePictureUrl,
+                          LikeCount = post.Likes.Count,
+                          CommentCount = post.Comments.Count,
+                          IsLikedByCurrentUser = post.Likes.Any(l => l.UserId == currentUserId)
+                      })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
+
     }
 }
