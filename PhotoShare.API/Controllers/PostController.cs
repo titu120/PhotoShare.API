@@ -170,24 +170,24 @@ namespace PhotoShare.API.Controllers
             return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
         }
 
-        // URL: GET api/Posts/feed
-        // কাজ: logged-in user যাদের Follow করে, শুধু তাদের Post দেখানো
+        // URL: GET api/Posts/feed?page=1&pageSize=10
+        // কাজ: logged-in user যাদের Follow করে, শুধু তাদের Post দেখানো, Pagination সহ
         [Authorize]
         [HttpGet("feed")]
-        public async Task<IActionResult> GetFeed()
+        public async Task<IActionResult> GetFeed(int page = 1, int pageSize = 10)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // আমি যাদের Follow করি, তাদের ID list বের করা হচ্ছে
             var followingIds = await _context.Follows
                 .Where(f => f.FollowerId == currentUserId)
                 .Select(f => f.FollowingId)
                 .ToListAsync();
 
-            // শুধু সেই user-দের Post গুলো ফিল্টার করা হচ্ছে (Contains দিয়ে)
             var posts = await _context.Posts
                 .Where(p => followingIds.Contains(p.UserId))
-                .OrderByDescending(p => p.CreatedAt)
+                .OrderByDescending(p => p.CreatedAt)   // newest-first
+                .Skip((page - 1) * pageSize)            // Pagination (Step 71)
+                .Take(pageSize)
                 .Select(p => new
                 {
                     p.Id,
@@ -198,9 +198,10 @@ namespace PhotoShare.API.Controllers
                 })
                 .ToListAsync();
 
-
             return Ok(posts);
         }
+
+
 
 
 
