@@ -7,16 +7,18 @@ using System.Security.Claims;
 
 namespace PhotoShare.API.Controllers
 {
-    // এই Controller এর সব URL শুরু হবে api/Likes দিয়ে
+    /// <summary>
+    /// লাইক, আনলাইক, পোস্টের লাইক লিস্ট এবং টগলিং সংক্রান্ত সকল রিকোয়েস্ট হ্যান্ডেল করার কন্ট্রোলার।
+    /// এই কন্ট্রোলারের সব API-এর বেস রুট হবে: api/Likes
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class LikesController : ControllerBase
     {
-        // Database এর সাথে কথা বলার টুল
+        // ডেটাবেসের সাথে যোগাযোগের প্রধান মাধ্যম (Entity Framework Core DbContext)
         private readonly AppDbContext _context;
 
-        // In-memory list — সব Notification এখানে সাময়িকভাবে জমা থাকবে
-        // App বন্ধ/restart হলে এই list খালি হয়ে যাবে (এখনো Database এ save হয় না)
+        // সাময়িক নোটিফিকেশন জমানোর জন্য ইন-মেমোরি লিস্ট (সার্ভার রিস্টার্ট হলে এগুলো মুছে যাবে)
         private static List<Notification> _notifications = new List<Notification>();
 
         public LikesController(AppDbContext context)
@@ -24,27 +26,31 @@ namespace PhotoShare.API.Controllers
             _context = context;
         }
 
-        // URL: POST api/Likes/{postId}
-        // কাজ: একটা Post এ Like দেওয়া, একই user দুইবার Like দিতে পারবে না
-        // Like দেওয়ার সময় Post এর মালিকের জন্য একটা Notification (in-memory) তৈরি হবে
+        /// <summary>
+        /// নির্দিষ্ট কোনো পোস্টে লাইক দেওয়ার জন্য এন্ডপয়েন্ট। 
+        /// একই ইউজার একটি পোস্টে একাধিকবার লাইক দিতে পারবে না।
+        /// </summary>
+        /// <param name="postId">যে পোস্টে লাইক দেওয়া হবে তার আইডি</param>
         [Authorize]
         [HttpPost("{postId}")]
         public async Task<IActionResult> LikePost(Guid postId)
         {
+            // টোকেন থেকে বর্তমান লগইন করা ইউজারের ইউনিক আইডি বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Post টা খোঁজা হচ্ছে (পুরো object লাগবে, কারণ owner এর UserId দরকার)
+            // পোস্টটি ডেটাবেসে আছে কি না এবং পোস্টের মালিকের আইডি পাওয়ার জন্য চেক করা হচ্ছে
             var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == postId);
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Validation: আগে থেকেই Like দেওয়া আছে কিনা
+            // ভ্যালিডেশন: ইউজার ইতিমধ্যে এই পোস্টে লাইক দিয়েছে কি না তা চেক করা
             var alreadyLiked = await _context.Likes
                 .AnyAsync(l => l.PostId == postId && l.UserId == userId);
 
             if (alreadyLiked)
                 return BadRequest(new { message = "আপনি ইতিমধ্যে এই Post এ Like দিয়েছেন" });
 
+            // নতুন লাইক অবজেক্ট তৈরি
             var like = new Like
             {
                 Id = Guid.NewGuid(),
@@ -53,10 +59,11 @@ namespace PhotoShare.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
+            // ডেটাবেসে লাইক যুক্ত করা এবং সেভ করা
             _context.Likes.Add(like);
             await _context.SaveChangesAsync();
 
-            // Post এর মালিকের জন্য একটা Notification তৈরি করা হচ্ছে (in-memory, Database এ না)
+            // পোস্টের মালিকের জন্য একটি নোটিফিকেশন তৈরি করে ইন-মেমোরি লিস্টে রাখা হচ্ছে
             var notification = new Notification
             {
                 Message = $"{userId} আপনার Post এ Like দিয়েছে",
@@ -68,38 +75,44 @@ namespace PhotoShare.API.Controllers
             return Ok(new { message = "Post এ Like দেওয়া হয়েছে" });
         }
 
-        // URL: DELETE api/Likes/{postId}
-        // কাজ: আগে দেওয়া Like তুলে নেওয়া (Unlike)
+        /// <summary>
+        /// পূর্বে দেওয়া লাইক তুলে নেওয়ার (Unlike) এন্ডপয়েন্ট।
+        /// </summary>
+        /// <param name="postId">যে পোস্টের লাইক রিমুভ করা হবে তার আইডি</param>
         [Authorize]
         [HttpDelete("{postId}")]
         public async Task<IActionResult> UnlikePost(Guid postId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // ইউজারের দেওয়া আগের লাইকটি ডেটাবেস থেকে খুঁজে বের করা
             var like = await _context.Likes
                 .FirstOrDefaultAsync(l => l.PostId == postId && l.UserId == userId);
 
             if (like == null)
                 return NotFound(new { message = "আপনি এই Post এ Like দেননি" });
 
+            // লাইক রিমুভ করে ডেটাবেস আপডেট করা
             _context.Likes.Remove(like);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Unlike করা হয়েছে" });
         }
 
-        // URL: GET api/Likes/{postId}
-        // কাজ: একটা Post এ কারা কারা Like দিয়েছে তাদের list দেখানো
+        /// <summary>
+        /// নির্দিষ্ট কোনো পোস্টে কারা কারা লাইক দিয়েছে, তাদের ইউজারনেমসহ তালিকা দেখানোর এন্ডপয়েন্ট।
+        /// </summary>
+        /// <param name="postId">পোস্টের আইডি</param>
         [HttpGet("{postId}")]
         public async Task<IActionResult> GetPostLikes(Guid postId)
         {
-            // এই Post এর সব Like থেকে UserId গুলো বের করা হচ্ছে
+            // ওই পোস্টের সব লাইক থেকে ইউজারদের আইডিগুলো আলাদা করা হচ্ছে
             var userIds = await _context.Likes
                 .Where(l => l.PostId == postId)
                 .Select(l => l.UserId)
                 .ToListAsync();
 
-            // সেই UserId গুলো দিয়ে আসল User এর তথ্য বের করা হচ্ছে
+            // প্রাপ্ত ইউজার আইডিগুলোর বিপরীতে ইউজারদের নাম ও আইডি ডেটাবেস থেকে তুলে আনা হচ্ছে
             var users = await _context.Users
                 .Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.UserName })
@@ -108,15 +121,16 @@ namespace PhotoShare.API.Controllers
             return Ok(users);
         }
 
-        // URL: GET api/Likes/most-liked-user
-        // কাজ: বর্তমান logged-in user সবচেয়ে বেশি কার Post এ Like দিয়েছে তা বের করা
+        /// <summary>
+        /// বর্তমান লগইন করা ইউজার সবচেয়ে বেশি কার পোস্টে লাইক দিয়েছে, তা বের করার এন্ডপয়েন্ট।
+        /// </summary>
         [Authorize]
         [HttpGet("most-liked-user")]
         public async Task<IActionResult> GetMostLikedUser()
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // আমার দেওয়া সব Like থেকে Post এর মালিক বের করে, কাকে কতবার Like দিয়েছি গোনা হচ্ছে
+            // ইউজারের দেওয়া লাইকগুলোর সাথে পোস্ট টেবিল জয়েন করে পোস্টের মালিককে (Owner) গ্রুপ ও কাউন্ট করা হচ্ছে
             var result = await _context.Likes
                 .Where(l => l.UserId == currentUserId)
                 .Join(_context.Posts,
@@ -138,32 +152,36 @@ namespace PhotoShare.API.Controllers
             return Ok(result);
         }
 
-        // URL: POST api/Likes/{postId}/toggle
-        // কাজ: Like থাকলে Unlike করা, না থাকলে Like করা — একই endpoint দুটোই করে
+        /// <summary>
+        /// সিঙ্গেল ক্লিকে লাইক টগল করার এন্ডপয়েন্ট। 
+        /// আগে থেকে লাইক থাকলে তা আনলাইক হয়ে যাবে, আর না থাকলে নতুন লাইক যোগ হবে।
+        /// </summary>
+        /// <param name="postId">পোস্টের আইডি</param>
         [Authorize]
         [HttpPost("{postId}/toggle")]
         public async Task<IActionResult> ToggleLike(Guid postId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // পোস্টের অস্তিত্ব যাচাই করা
             var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
+            // ইতিপূর্বে লাইক দেওয়া আছে কি না চেক করা
             var existingLike = await _context.Likes
                 .FirstOrDefaultAsync(l => l.PostId == postId && l.UserId == userId);
 
             if (existingLike != null)
             {
-                // আগে থেকে Like ছিল → এখন Unlike করা হচ্ছে
+                // লাইক করা থাকলে তা রিমুভ (Unlike) করা হচ্ছে
                 _context.Likes.Remove(existingLike);
                 await _context.SaveChangesAsync();
                 return Ok(new { liked = false, message = "Unlike করা হয়েছে" });
             }
             else
-
             {
-                // আগে Like ছিল না → এখন নতুন Like দেওয়া হচ্ছে
+                // লাইক না থাকলে নতুন লাইক যোগ করা হচ্ছে
                 var like = new Like
                 {
                     Id = Guid.NewGuid(),

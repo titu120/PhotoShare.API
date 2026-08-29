@@ -169,5 +169,40 @@ namespace PhotoShare.API.Controllers
 
             return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
         }
+
+        // URL: GET api/Posts/feed
+        // কাজ: logged-in user যাদের Follow করে, শুধু তাদের Post দেখানো
+        [Authorize]
+        [HttpGet("feed")]
+        public async Task<IActionResult> GetFeed()
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // আমি যাদের Follow করি, তাদের ID list বের করা হচ্ছে
+            var followingIds = await _context.Follows
+                .Where(f => f.FollowerId == currentUserId)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // শুধু সেই user-দের Post গুলো ফিল্টার করা হচ্ছে (Contains দিয়ে)
+            var posts = await _context.Posts
+                .Where(p => followingIds.Contains(p.UserId))
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Caption,
+                    p.ImageUrl,
+                    p.UserId,
+                    p.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
+
+
+
     }
 }

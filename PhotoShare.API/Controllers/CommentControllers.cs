@@ -8,10 +8,15 @@ using System.Security.Claims;
 
 namespace PhotoShare.API.Controllers
 {
+    /// <summary>
+    /// কমেন্ট তৈরি, পোস্টের কমেন্ট লিস্ট দেখা, নির্দিষ্ট কমেন্ট ডিলিট এবং ইউজারের কমেন্ট হিস্ট্রি সংক্রান্ত সকল লজিক হ্যান্ডেল করার কন্ট্রোলার।
+    /// এই কন্ট্রোলারের সব API-এর বেস রুট হবে: api/Comments
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class CommentsController : ControllerBase
     {
+        // ডেটাবেসের সাথে যোগাযোগের প্রধান মাধ্যম (Entity Framework Core DbContext)
         private readonly AppDbContext _context;
 
         public CommentsController(AppDbContext context)
@@ -19,26 +24,33 @@ namespace PhotoShare.API.Controllers
             _context = context;
         }
 
-        // URL: POST api/Comments/{postId}
-        // কাজ: একটা Post এ নতুন Comment যোগ করা, শুধু login করা user-ই পারবে
+        /// <summary>
+        /// নির্দিষ্ট কোনো পোস্টে নতুন কমেন্ট যোগ করার এন্ডপয়েন্ট। 
+        /// কমেন্ট খালি বা ৫০০ ক্যারেক্টারের বেশি হতে পারবে না এবং এর জন্য লগইন থাকা বাধ্যতামূলক।
+        /// </summary>
+        /// <param name="postId">যে পোস্টে কমেন্ট করা হবে তার আইডি</param>
+        /// <param name="dto">কমেন্টের কন্টেন্ট ধারণকারী অবজেক্ট</param>
         [Authorize]
         [HttpPost("{postId}")]
         public async Task<IActionResult> CreateComment(Guid postId, [FromBody] CreateCommentDto dto)
         {
-            // Validation: Comment খালি হতে পারবে না
+            // ভ্যালিডেশন ১: কমেন্ট খালি বা হোয়াইটস্পেস হতে পারবে না
             if (string.IsNullOrWhiteSpace(dto.Content))
                 return BadRequest(new { message = "Comment খালি হতে পারবে না" });
 
-            // Validation: Comment ৫০০ character এর বেশি হতে পারবে না
+            // ভ্যালিডেশন ২: কমেন্ট ৫০০ ক্যারেক্টারের বেশি হতে পারবে না
             if (dto.Content.Length > 500)
                 return BadRequest(new { message = "Comment ৫০০ character এর বেশি হতে পারবে না" });
 
+            // টোকেন থেকে বর্তমান লগইন করা ইউজারের ইউনিক আইডি বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // পোস্টের অস্তিত্ব যাচাই করা
             var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
+            // নতুন কমেন্ট অবজেক্ট তৈরি
             var comment = new Comment
             {
                 Id = Guid.NewGuid(),
@@ -48,6 +60,7 @@ namespace PhotoShare.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
+            // ডেটাবেসে কমেন্ট যুক্ত করা এবং সেভ করা
             _context.Comments.Add(comment);
             await _context.SaveChangesAsync();
 
@@ -61,18 +74,21 @@ namespace PhotoShare.API.Controllers
             });
         }
 
-        // URL: GET api/Comments/{postId}
-        // কাজ: একটা Post এর সব Comment দেখানো, commenter এর username/profile picture সহ
+        /// <summary>
+        /// নির্দিষ্ট কোনো পোস্টের সকল কমেন্ট, কমেন্টকারীর ইউজারনেম এবং প্রোফাইল পিকচারসহ দেখার এন্ডপয়েন্ট।
+        /// </summary>
+        /// <param name="postId">পোস্টের আইডি</param>
         [HttpGet("{postId}")]
         public async Task<IActionResult> GetPostComments(Guid postId)
         {
+            // কমেন্ট টেবিলের সাথে ইউজার টেবিল জয়েন করে প্রয়োজনীয় তথ্য তুলে আনা হচ্ছে
             var comments = await _context.Comments
                 .Where(c => c.PostId == postId)
                 .OrderBy(c => c.CreatedAt)
-                .Join(_context.Users,                          // Users টেবিলের সাথে জোড়া লাগানো
-                      comment => comment.UserId,                 // Comment এর UserId
-                      user => user.Id,                            // Users এর Id
-                      (comment, user) => new                      // দুটো মিলিয়ে নতুন shape বানানো
+                .Join(_context.Users,
+                      comment => comment.UserId,
+                      user => user.Id,
+                      (comment, user) => new
                       {
                           comment.Id,
                           comment.Content,
@@ -86,8 +102,11 @@ namespace PhotoShare.API.Controllers
             return Ok(comments);
         }
 
-        // URL: DELETE api/Comments/{id}
-        // কাজ: Comment মুছে ফেলা, শুধু যে লিখেছে সে-ই পারবে
+        /// <summary>
+        /// নির্দিষ্ট কোনো কমেন্ট মুছে ফেলার এন্ডপয়েন্ট। 
+        /// শুধুমাত্র যে কমেন্টটি লিখেছেন, তিনিই এটি ডিলিট করতে পারবেন।
+        /// </summary>
+        /// <param name="id">কমেন্টের আইডি</param>
         [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteComment(Guid id)
@@ -99,24 +118,27 @@ namespace PhotoShare.API.Controllers
 
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Validation: শুধু নিজের Comment-ই delete করা যাবে
+            // ভ্যালিডেশন: শুধুমাত্র কমেন্টকারী নিজে ছাড়া অন্য কেউ এটি ডিলিট করতে পারবে না
             if (comment.UserId != currentUserId)
                 return Forbid();
 
+            // ডেটাবেস থেকে কমেন্ট রিমুভ করা এবং সেভ করা
             _context.Comments.Remove(comment);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Comment সফলভাবে মুছে ফেলা হয়েছে" });
         }
 
-        // URL: GET api/Comments/user/{userId}
-        // কাজ: একজন নির্দিষ্ট user এর করা সব Comment এর history দেখানো
+        /// <summary>
+        /// নির্দিষ্ট একজন ইউজারের করা সমস্ত কমেন্টের হিস্ট্রি বা তালিকা নতুন থেকে পুরানো ক্রমানুসারে দেখার এন্ডপয়েন্ট।
+        /// </summary>
+        /// <param name="userId">ইউজারের আইডি</param>
         [HttpGet("user/{userId}")]
         public async Task<IActionResult> GetUserCommentHistory(string userId)
         {
             var comments = await _context.Comments
                 .Where(c => c.UserId == userId)
-                .OrderByDescending(c => c.CreatedAt)   // নতুন থেকে পুরাতন (history দেখানোর স্বাভাবিক নিয়ম)
+                .OrderByDescending(c => c.CreatedAt)   // লেটেস্ট কমেন্টগুলো আগে দেখানোর জন্য
                 .Select(c => new
                 {
                     c.Id,
@@ -128,11 +150,5 @@ namespace PhotoShare.API.Controllers
 
             return Ok(comments);
         }
-
-
-
-
-
-
     }
 }
