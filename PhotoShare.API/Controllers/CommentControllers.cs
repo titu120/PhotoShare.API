@@ -109,6 +109,26 @@ namespace PhotoShare.API.Controllers
             return Ok(new { message = "Comment সফলভাবে মুছে ফেলা হয়েছে" });
         }
 
+        // URL: GET api/Comments/user/{userId}
+        // কাজ: একজন নির্দিষ্ট user এর করা সব Comment এর history দেখানো
+        [HttpGet("user/{userId}")]
+        public async Task<IActionResult> GetUserCommentHistory(string userId)
+        {
+            var comments = await _context.Comments
+                .Where(c => c.UserId == userId)
+                .OrderByDescending(c => c.CreatedAt)   // নতুন থেকে পুরাতন (history দেখানোর স্বাভাবিক নিয়ম)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Content,
+                    c.PostId,
+                    c.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(comments);
+        }
+
 
 
 
