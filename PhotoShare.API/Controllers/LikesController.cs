@@ -12,7 +12,12 @@ namespace PhotoShare.API.Controllers
     [ApiController]
     public class LikesController : ControllerBase
     {
+        // Database এর সাথে কথা বলার টুল
         private readonly AppDbContext _context;
+
+        // In-memory list — সব Notification এখানে সাময়িকভাবে জমা থাকবে
+        // App বন্ধ/restart হলে এই list খালি হয়ে যাবে (এখনো Database এ save হয় না)
+        private static List<Notification> _notifications = new List<Notification>();
 
         public LikesController(AppDbContext context)
         {
@@ -21,16 +26,19 @@ namespace PhotoShare.API.Controllers
 
         // URL: POST api/Likes/{postId}
         // কাজ: একটা Post এ Like দেওয়া, একই user দুইবার Like দিতে পারবে না
+        // Like দেওয়ার সময় Post এর মালিকের জন্য একটা Notification (in-memory) তৈরি হবে
         [Authorize]
         [HttpPost("{postId}")]
         public async Task<IActionResult> LikePost(Guid postId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
-            if (!postExists)
+            // Post টা খোঁজা হচ্ছে (পুরো object লাগবে, কারণ owner এর UserId দরকার)
+            var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == postId);
+            if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
+            // Validation: আগে থেকেই Like দেওয়া আছে কিনা
             var alreadyLiked = await _context.Likes
                 .AnyAsync(l => l.PostId == postId && l.UserId == userId);
 
@@ -47,6 +55,15 @@ namespace PhotoShare.API.Controllers
 
             _context.Likes.Add(like);
             await _context.SaveChangesAsync();
+
+            // Post এর মালিকের জন্য একটা Notification তৈরি করা হচ্ছে (in-memory, Database এ না)
+            var notification = new Notification
+            {
+                Message = $"{userId} আপনার Post এ Like দিয়েছে",
+                ToUserId = post.UserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _notifications.Add(notification);
 
             return Ok(new { message = "Post এ Like দেওয়া হয়েছে" });
         }
@@ -76,11 +93,13 @@ namespace PhotoShare.API.Controllers
         [HttpGet("{postId}")]
         public async Task<IActionResult> GetPostLikes(Guid postId)
         {
+            // এই Post এর সব Like থেকে UserId গুলো বের করা হচ্ছে
             var userIds = await _context.Likes
                 .Where(l => l.PostId == postId)
                 .Select(l => l.UserId)
                 .ToListAsync();
 
+            // সেই UserId গুলো দিয়ে আসল User এর তথ্য বের করা হচ্ছে
             var users = await _context.Users
                 .Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.UserName })
@@ -97,6 +116,7 @@ namespace PhotoShare.API.Controllers
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // আমার দেওয়া সব Like থেকে Post এর মালিক বের করে, কাকে কতবার Like দিয়েছি গোনা হচ্ছে
             var result = await _context.Likes
                 .Where(l => l.UserId == currentUserId)
                 .Join(_context.Posts,
@@ -141,6 +161,7 @@ namespace PhotoShare.API.Controllers
                 return Ok(new { liked = false, message = "Unlike করা হয়েছে" });
             }
             else
+
             {
                 // আগে Like ছিল না → এখন নতুন Like দেওয়া হচ্ছে
                 var like = new Like
