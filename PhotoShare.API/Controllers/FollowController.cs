@@ -116,6 +116,44 @@ namespace PhotoShare.API.Controllers
         }
 
 
+        // URL: GET api/Follow/{id}/suggested
+        // কাজ: এই user এর followers রা যাদের follow করে, কিন্তু এই user নিজে follow করে না — তাদের suggest করা
+        [HttpGet("{id}/suggested")]
+        public async Task<IActionResult> GetSuggestedUsers(string id)
+        {
+            // এই user কে যারা Follow করছে (আমার followers)
+            var myFollowers = await _context.Follows
+                .Where(f => f.FollowingId == id)
+                .Select(f => f.FollowerId)
+                .ToListAsync();
+
+            // এই user নিজে যাদের Follow করছে (এইগুলো বাদ দিতে হবে suggestion থেকে)
+            var alreadyFollowing = await _context.Follows
+                .Where(f => f.FollowerId == id)
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // আমার followers-রা যাদের Follow করে, তাদের সবার ID (duplicate সহ হতে পারে)
+            var followersOfMyFollowers = await _context.Follows
+                .Where(f => myFollowers.Contains(f.FollowerId))
+                .Select(f => f.FollowingId)
+                .ToListAsync();
+
+            // Suggestion তালিকা তৈরি: followers-দের follow করা মানুষদের মধ্যে যারা...
+            var suggestedIds = followersOfMyFollowers
+                .Distinct()                              // duplicate বাদ (একজনকে বার বার suggest না করা)
+                .Where(userId => userId != id)            // নিজেকে suggest না করা
+                .Where(userId => !alreadyFollowing.Contains(userId))  // যাদের আগে থেকেই follow করছি, তাদের বাদ
+                .ToList();
+
+            var suggestedUsers = await _context.Users
+                .Where(u => suggestedIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.UserName })
+                .ToListAsync();
+
+            return Ok(suggestedUsers);
+        }
+
 
 
 
