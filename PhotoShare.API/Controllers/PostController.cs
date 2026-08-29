@@ -28,11 +28,12 @@ namespace PhotoShare.API.Controllers
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreatePost([FromBody] CreatePostDto dto)
+
         {
-            // Token থেকে বর্তমানে logged-in user এর ID বের করা হচ্ছে
+            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // নতুন Post object বানানো হচ্ছে
+            // নতুন Post object বানানো হচ্ছে (Caption, ImageUrl, UserId দিয়ে)
             var post = Post.Create(dto.Caption, dto.ImageUrl, userId);
 
             // Database এ যোগ করা হচ্ছে
@@ -40,14 +41,7 @@ namespace PhotoShare.API.Controllers
             await _context.SaveChangesAsync();
 
             // তৈরি হওয়া Post এর তথ্য ফেরত পাঠানো হচ্ছে
-            return Ok(new
-            {
-                post.Id,
-                post.Caption,
-                post.ImageUrl,
-                post.UserId,
-                post.CreatedAt
-            });
+            return Ok(new { post.Id, post.Caption, post.ImageUrl, post.UserId, post.CreatedAt });
         }
 
         // URL: GET api/Posts
@@ -56,14 +50,30 @@ namespace PhotoShare.API.Controllers
         public async Task<IActionResult> GetAllPosts()
         {
             var posts = await _context.Posts
-                .OrderByDescending(p => p.CreatedAt)   // নতুন থেকে পুরাতন সাজানো হচ্ছে
+                .OrderByDescending(p => p.CreatedAt)   // নতুন থেকে পুরাতন সাজানো
+                .Select(p => new { p.Id, p.Caption, p.ImageUrl, p.UserId, p.CreatedAt })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
+        // URL: GET api/Posts/most-liked
+        // কাজ: সবচেয়ে বেশি Like পাওয়া Post গুলো দেখানো (Top 10)
+        // ⚠️ এটা অবশ্যই GetPostById({id}) এর আগে থাকতে হবে, নাহলে রুট ভুলভাবে ম্যাচ হতে পারে
+        [HttpGet("most-liked")]
+        public async Task<IActionResult> GetMostLikedPosts()
+        {
+            var posts = await _context.Posts
+                .OrderByDescending(p => p.Likes.Count)   // Like সংখ্যা অনুযায়ী বেশি থেকে কম সাজানো
+                .Take(10)                                 // শুধু প্রথম ১০টা নেওয়া
                 .Select(p => new
                 {
                     p.Id,
                     p.Caption,
                     p.ImageUrl,
                     p.UserId,
-                    p.CreatedAt
+                    p.CreatedAt,
+                    LikeCount = p.Likes.Count
                 })
                 .ToListAsync();
 
@@ -89,6 +99,7 @@ namespace PhotoShare.API.Controllers
                 })
                 .FirstOrDefaultAsync();
 
+            // Post না পাওয়া গেলে error
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
@@ -101,32 +112,23 @@ namespace PhotoShare.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePost(Guid id, [FromBody] UpdatePostDto dto)
         {
-            // যে Post টা বদলাতে চাওয়া হচ্ছে, সেটা খোঁজা হচ্ছে
+            // যে Post টা বদলাতে চাওয়া হচ্ছে সেটা খোঁজা
             var post = await _context.Posts.FindAsync(id);
-
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
+            // Token থেকে বর্তমান user এর ID বের করা
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             // Validation: শুধু নিজের Post-ই edit করা যাবে
             if (post.UserId != currentUserId)
                 return Forbid();
 
-            // Caption পরিবর্তন করা হচ্ছে
+            // Caption পরিবর্তন করা
             post.UpdateCaption(dto.Caption);
-
             await _context.SaveChangesAsync();
 
-            return Ok(new
-            {
-                post.Id,
-                post.Caption,
-                post.ImageUrl,
-                post.UserId,
-                post.CreatedAt
-            });
+            return Ok(new { post.Id, post.Caption, post.ImageUrl, post.UserId, post.CreatedAt });
         }
 
         // URL: DELETE api/Posts/{id}
@@ -135,27 +137,23 @@ namespace PhotoShare.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(Guid id)
         {
-            // যে Post টা মুছতে চাওয়া হচ্ছে, সেটা খোঁজা হচ্ছে
+            // যে Post টা মুছতে চাওয়া হচ্ছে সেটা খোঁজা
             var post = await _context.Posts.FindAsync(id);
-
             if (post == null)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
+            // Token থেকে বর্তমান user এর ID বের করা
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             // Validation: শুধু নিজের Post-ই delete করা যাবে
             if (post.UserId != currentUserId)
                 return Forbid();
 
-            // Post মুছে ফেলা হচ্ছে
+            // Post মুছে ফেলা
             _context.Posts.Remove(post);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Post সফলভাবে মুছে ফেলা হয়েছে" });
         }
-
-
-
     }
 }
