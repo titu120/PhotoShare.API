@@ -75,6 +75,29 @@ namespace PhotoShare.API.Controllers
             return Ok(comments);
         }
 
+        // URL: DELETE api/Comments/{id}
+        // কাজ: Comment মুছে ফেলা, শুধু যে লিখেছে সে-ই পারবে
+        [Authorize]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteComment(Guid id)
+        {
+            var comment = await _context.Comments.FindAsync(id);
+
+            if (comment == null)
+                return NotFound(new { message = "Comment পাওয়া যায়নি" });
+
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Validation: শুধু নিজের Comment-ই delete করা যাবে
+            if (comment.UserId != currentUserId)
+                return Forbid();
+
+            _context.Comments.Remove(comment);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Comment সফলভাবে মুছে ফেলা হয়েছে" });
+        }
+
 
 
 
