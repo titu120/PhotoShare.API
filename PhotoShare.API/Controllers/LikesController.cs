@@ -54,6 +54,28 @@ namespace PhotoShare.API.Controllers
             return Ok(new { message = "Post এ Like দেওয়া হয়েছে" });
         }
 
+        // URL: DELETE api/Likes/{postId}
+        // কাজ: আগে দেওয়া Like তুলে নেওয়া (Unlike)
+        [Authorize]
+        [HttpDelete("{postId}")]
+        public async Task<IActionResult> UnlikePost(Guid postId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // এই user এর এই Post এ দেওয়া Like টা খোঁজা হচ্ছে
+            var like = await _context.Likes
+                .FirstOrDefaultAsync(l => l.PostId == postId && l.UserId == userId);
+
+            if (like == null)
+                return NotFound(new { message = "আপনি এই Post এ Like দেননি" });
+
+            // Like মুছে ফেলা হচ্ছে
+            _context.Likes.Remove(like);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Unlike করা হয়েছে" });
+        }
+
 
 
 
