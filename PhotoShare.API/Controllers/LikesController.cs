@@ -22,19 +22,24 @@ namespace PhotoShare.API.Controllers
 
         // URL: POST api/Likes/{postId}
         // কাজ: একটা Post এ Like দেওয়া, শুধু login করা user-ই পারবে
+        // একই user একই Post দুইবার Like দিতে পারবে না
         [Authorize]
         [HttpPost("{postId}")]
         public async Task<IActionResult> LikePost(Guid postId)
         {
-            // Token থেকে বর্তমান logged-in user এর ID বের করা হচ্ছে
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Post টা সত্যিই আছে কিনা check করা হচ্ছে
             var postExists = await _context.Posts.AnyAsync(p => p.Id == postId);
             if (!postExists)
                 return NotFound(new { message = "Post পাওয়া যায়নি" });
 
-            // নতুন Like তৈরি করা হচ্ছে
+            // Validation: এই user আগে থেকেই এই Post এ Like দিয়েছে কিনা check করা হচ্ছে
+            var alreadyLiked = await _context.Likes
+                .AnyAsync(l => l.PostId == postId && l.UserId == userId);
+
+            if (alreadyLiked)
+                return BadRequest(new { message = "আপনি ইতিমধ্যে এই Post এ Like দিয়েছেন" });
+
             var like = new Like
             {
                 Id = Guid.NewGuid(),
@@ -48,5 +53,11 @@ namespace PhotoShare.API.Controllers
 
             return Ok(new { message = "Post এ Like দেওয়া হয়েছে" });
         }
+
+
+
+
+
+
     }
 }
