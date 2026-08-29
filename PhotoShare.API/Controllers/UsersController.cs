@@ -108,6 +108,32 @@ namespace PhotoShare.API.Controllers
 
             return Ok(followingUsers);
         }
+
+        // URL: GET api/Users/{id}/posts
+        // কাজ: একজন নির্দিষ্ট user এর সব Post দেখানো
+        [HttpGet("{id}/posts")]
+        public async Task<IActionResult> GetUserPosts(string id)
+        {
+            // LINQ Where দিয়ে filter করা হচ্ছে — শুধু এই UserId এর Post গুলো
+            var posts = await _context.Posts
+                .Where(p => p.UserId == id)
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Caption,
+                    p.ImageUrl,
+                    p.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+
+
+
+
+
     }
 
     // PUT request এ client যে data (Bio, ProfilePictureUrl) পাঠাবে তার shape
