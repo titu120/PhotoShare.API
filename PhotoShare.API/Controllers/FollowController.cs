@@ -50,5 +50,29 @@ namespace PhotoShare.API.Controllers
 
             return Ok(new { message = "Follow করা হয়েছে" });
         }
+
+        // URL: DELETE api/Follow/{id}
+        // কাজ: আগে করা Follow তুলে নেওয়া (Unfollow)
+        [Authorize]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> UnfollowUser(string id)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // এই Follow record টা খোঁজা হচ্ছে
+            var follow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+
+            if (follow == null)
+                return NotFound(new { message = "আপনি এই user কে Follow করেননি" });
+
+            _context.Follows.Remove(follow);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Unfollow করা হয়েছে" });
+        }
+
+
+
     }
 }
