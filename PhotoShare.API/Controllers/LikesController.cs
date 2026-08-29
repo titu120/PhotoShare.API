@@ -77,6 +77,27 @@ namespace PhotoShare.API.Controllers
         }
 
 
+        // URL: GET api/Likes/{postId}
+        // কাজ: একটা Post এ কারা কারা Like দিয়েছে তাদের list দেখানো
+        [HttpGet("{postId}")]
+        public async Task<IActionResult> GetPostLikes(Guid postId)
+        {
+            // এই Post এর সব Like থেকে UserId গুলো বের করা হচ্ছে
+            var userIds = await _context.Likes
+                .Where(l => l.PostId == postId)
+                .Select(l => l.UserId)
+                .ToListAsync();
+
+            // সেই UserId গুলো দিয়ে আসল User এর তথ্য (নাম) বের করা হচ্ছে
+            var users = await _context.Users
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.UserName })
+                .ToListAsync();
+
+            return Ok(users);
+        }
+
+
 
 
 
